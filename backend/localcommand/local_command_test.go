@@ -8,13 +8,13 @@ import (
 )
 
 func TestNewFactory(t *testing.T) {
-	factory, err := NewFactory("/bin/false", []string{}, &Options{CloseSignal: 123, CloseTimeout: 321})
+	factory, err := NewFactory("/bin/cat", []string{}, &Options{CloseSignal: 123, CloseTimeout: 321})
 	if err != nil {
 		t.Errorf("NewFactory() returned error")
 		return
 	}
-	if factory.command != "/bin/false" {
-		t.Errorf("factory.command = %v, expected %v", factory.command, "/bin/false")
+	if factory.command != "/bin/cat" {
+		t.Errorf("factory.command = %v, expected %v", factory.command, "/bin/cat")
 	}
 	if !reflect.DeepEqual(factory.argv, []string{}) {
 		t.Errorf("factory.argv = %v, expected %v", factory.argv, []string{})
@@ -23,7 +23,13 @@ func TestNewFactory(t *testing.T) {
 		t.Errorf("factory.options = %v, expected %v", factory.options, &Options{})
 	}
 
-	slave, _ := factory.New(nil, nil)
+	slave, err := factory.New(nil, nil)
+	if err != nil {
+		t.Errorf("factory.New() returned error: %v", err)
+		return
+	}
+	defer slave.Close()
+
 	lcmd := slave.(*LocalCommand)
 	if lcmd.closeSignal != 123 {
 		t.Errorf("lcmd.closeSignal = %v, expected %v", lcmd.closeSignal, 123)

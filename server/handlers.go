@@ -73,11 +73,15 @@ func (server *Server) generateHandleWS(ctx context.Context, cancel context.Cance
 		}
 		defer conn.Close()
 
+		var headers map[string][]string
 		if server.options.PassHeaders {
-			err = server.processWSConn(ctx, conn, r.Header)
-		} else {
-			err = server.processWSConn(ctx, conn, nil)
+			headers = r.Header
 		}
+
+		// Extract query parameters from the HTTP request
+		queryParams := r.URL.Query()
+
+		err = server.processWSConn(ctx, conn, headers, queryParams)
 
 		switch err {
 		case ctx.Err():
@@ -92,7 +96,7 @@ func (server *Server) generateHandleWS(ctx context.Context, cancel context.Cance
 	}
 }
 
-func (server *Server) processWSConn(ctx context.Context, conn *websocket.Conn, headers map[string][]string) error {
+func (server *Server) processWSConn(ctx context.Context, conn *websocket.Conn, headers map[string][]string, httpQueryParams url.Values) error {
 	typ, initLine, err := conn.ReadMessage()
 	if err != nil {
 		return errors.Wrapf(err, "failed to authenticate websocket connection")
@@ -120,6 +124,13 @@ func (server *Server) processWSConn(ctx context.Context, conn *websocket.Conn, h
 		return errors.Wrapf(err, "failed to parse arguments")
 	}
 	params := query.Query()
+
+	// Merge HTTP query parameters with WebSocket init arguments
+	// HTTP query parameters take precedence
+	for key, values := range httpQueryParams {
+		params[key] = values
+	}
+
 	var slave Slave
 	slave, err = server.factory.New(params, headers)
 	if err != nil {

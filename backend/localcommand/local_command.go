@@ -45,12 +45,14 @@ func New(command string, argv []string, headers map[string][]string, params map[
 	}
 
 	// Add query parameters as environment variables (excluding special 'arg' param)
-	for key, values := range params {
-		if key != "arg" && len(values) > 0 {
-			// Use the first value if multiple values exist for the same key
-			// Convert to uppercase for consistency
-			envKey := strings.ToUpper(key)
-			cmd.Env = append(cmd.Env, envKey+"="+values[0])
+	if params != nil {
+		for key, values := range params {
+			if key != "arg" && len(values) > 0 {
+				// Use the first value if multiple values exist for the same key
+				// Convert to uppercase for consistency
+				envKey := strings.ToUpper(key)
+				cmd.Env = append(cmd.Env, envKey+"="+values[0])
+			}
 		}
 	}
 
