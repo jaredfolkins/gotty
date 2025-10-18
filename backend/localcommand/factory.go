@@ -44,5 +44,5 @@ func (factory *Factory) New(params map[string][]string, headers map[string][]str
 		argv = append(argv, params["arg"]...)
 	}
 
-	return New(factory.command, argv, headers, factory.opts...)
+	return New(factory.command, argv, headers, params, factory.opts...)
 }

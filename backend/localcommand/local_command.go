@@ -28,7 +28,7 @@ type LocalCommand struct {
 	ptyClosed chan struct{}
 }
 
-func New(command string, argv []string, headers map[string][]string, options ...Option) (*LocalCommand, error) {
+func New(command string, argv []string, headers map[string][]string, params map[string][]string, options ...Option) (*LocalCommand, error) {
 	cmd := exec.Command(command, argv...)
 
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
@@ -42,6 +42,16 @@ func New(command string, argv []string, headers map[string][]string, options ...
 		h := "HTTP_" + strings.Replace(strings.ToUpper(key), "-", "_", -1) + "=" + strings.Join(values, ",")
 		// log.Printf("Adding header: %s", h)
 		cmd.Env = append(cmd.Env, h)
+	}
+
+	// Add query parameters as environment variables (excluding special 'arg' param)
+	for key, values := range params {
+		if key != "arg" && len(values) > 0 {
+			// Use the first value if multiple values exist for the same key
+			// Convert to uppercase for consistency
+			envKey := strings.ToUpper(key)
+			cmd.Env = append(cmd.Env, envKey+"="+values[0])
+		}
 	}
 
 	pty, err := pty.Start(cmd)
