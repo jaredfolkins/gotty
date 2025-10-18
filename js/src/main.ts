@@ -14,7 +14,7 @@ if (elem !== null) {
     term = new GoTTYXterm(elem);
 
     const httpsEnabled = window.location.protocol == "https:";
-    const queryArgs = (gotty_ws_query_args === "") ? "" : "?" + gotty_ws_query_args;
+    const queryArgs = window.location.search || ((gotty_ws_query_args === "") ? "" : "?" + gotty_ws_query_args);
     const url = (httpsEnabled ? 'wss://' : 'ws://') + window.location.host + window.location.pathname + 'ws' + queryArgs;
     const args = window.location.search;
     const factory = new ConnectionFactory(url, protocols);
