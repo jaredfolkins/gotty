@@ -51,7 +51,9 @@ func New(command string, argv []string, headers map[string][]string, params map[
 				// Use the first value if multiple values exist for the same key
 				// Convert to uppercase for consistency
 				envKey := strings.ToUpper(key)
-				cmd.Env = append(cmd.Env, envKey+"="+values[0])
+				envValue := envKey + "=" + values[0]
+				cmd.Env = append(cmd.Env, envValue)
+				// log.Printf("Added env var: %s", envValue)
 			}
 		}
 	}

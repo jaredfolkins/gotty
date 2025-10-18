@@ -80,6 +80,7 @@ func (server *Server) generateHandleWS(ctx context.Context, cancel context.Cance
 
 		// Extract query parameters from the HTTP request
 		queryParams := r.URL.Query()
+		log.Printf("HTTP Query Params: %v", queryParams)
 
 		err = server.processWSConn(ctx, conn, headers, queryParams)
 
@@ -130,6 +131,7 @@ func (server *Server) processWSConn(ctx context.Context, conn *websocket.Conn, h
 	for key, values := range httpQueryParams {
 		params[key] = values
 	}
+	log.Printf("Final params being passed to factory: %v", params)
 
 	var slave Slave
 	slave, err = server.factory.New(params, headers)
