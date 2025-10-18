@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 )
 
@@ -46,6 +47,32 @@ func (server *Server) wrapBasicAuth(handler http.Handler, credential string) htt
 		}
 
 		log.Printf("Basic Authentication Succeeded: %s", r.RemoteAddr)
+		handler.ServeHTTP(w, r)
+	})
+}
+
+func (server *Server) wrapQueryParamsToEnv(handler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Get all query parameters
+		queryParams := r.URL.Query()
+
+		// Convert each query parameter to an environment variable
+		for key, values := range queryParams {
+			if len(values) > 0 {
+				// Use the first value if multiple values exist for the same key
+				envValue := values[0]
+				// Set the environment variable
+				// Note: Environment variable names are typically uppercase
+				envKey := strings.ToUpper(key)
+				err := os.Setenv(envKey, envValue)
+				if err != nil {
+					log.Printf("Failed to set env var %s: %v", envKey, err)
+				} else {
+					log.Printf("Set env var from query param: %s=%s", envKey, envValue)
+				}
+			}
+		}
+
 		handler.ServeHTTP(w, r)
 	})
 }
