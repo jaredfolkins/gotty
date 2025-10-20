@@ -12,6 +12,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	noesctmpl "text/template"
 	"time"
 
@@ -34,6 +35,8 @@ type Server struct {
 	indexTemplate    *template.Template
 	titleTemplate    *noesctmpl.Template
 	manifestTemplate *template.Template
+
+	terminating int32 // atomic flag for termination state
 }
 
 // New creates a new instance of Server.
@@ -232,7 +235,20 @@ func (server *Server) setupHandlers(ctx context.Context, cancel context.CancelFu
 	wsMux.HandleFunc(pathPrefix+"ws", server.generateHandleWS(ctx, cancel, counter))
 	siteHandler = http.Handler(wsMux)
 
+	// Wrap with termination middleware
+	siteHandler = server.wrapTerminationMiddleware(siteHandler)
+
 	return siteHandler
+}
+
+func (server *Server) wrapTerminationMiddleware(handler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.LoadInt32(&server.terminating) == 1 {
+			http.Error(w, "Service is terminating", 499)
+			return
+		}
+		handler.ServeHTTP(w, r)
+	})
 }
 
 func (server *Server) setupHTTPServer(handler http.Handler) (*http.Server, error) {

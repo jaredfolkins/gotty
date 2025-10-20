@@ -3,9 +3,9 @@ import { Terminal, WebTTY, protocols } from "./webtty";
 import { GoTTYXterm } from "./xterm";
 
 // @TODO remove these
-declare var gotty_auth_token: string;
-declare var gotty_term: string;
-declare var gotty_ws_query_args: string;
+declare var gotty_auth_token: string | undefined;
+declare var gotty_term: string | undefined;
+declare var gotty_ws_query_args: string | undefined;
 
 const elem = document.getElementById("terminal")
 
@@ -14,11 +14,12 @@ if (elem !== null) {
     term = new GoTTYXterm(elem);
 
     const httpsEnabled = window.location.protocol == "https:";
-    const queryArgs = window.location.search || ((gotty_ws_query_args === "") ? "" : "?" + gotty_ws_query_args);
+    const queryArgs = window.location.search || ((typeof gotty_ws_query_args !== 'undefined' && gotty_ws_query_args !== "") ? "?" + gotty_ws_query_args : "");
     const url = (httpsEnabled ? 'wss://' : 'ws://') + window.location.host + window.location.pathname + 'ws' + queryArgs;
     const args = window.location.search;
     const factory = new ConnectionFactory(url, protocols);
-    const wt = new WebTTY(term, factory, args, gotty_auth_token);
+    const authToken = typeof gotty_auth_token !== 'undefined' ? gotty_auth_token : '';
+    const wt = new WebTTY(term, factory, args, authToken);
     const closer = wt.open();
 
     // According to https://developer.mozilla.org/en-US/docs/Web/API/Window/unload_event

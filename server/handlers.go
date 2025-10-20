@@ -52,8 +52,12 @@ func (server *Server) generateHandleWS(ctx context.Context, cancel context.Cance
 				cancel()
 			}
 
-			// Exit the process when any WebSocket connection closes
-			log.Printf("WebSocket disconnected, exiting process...")
+			// Set terminating flag when WebSocket connection closes
+			log.Printf("WebSocket disconnected, setting terminating flag...")
+			atomic.StoreInt32(&server.terminating, 1)
+
+			// Then exit the process
+			log.Printf("Exiting process...")
 			os.Exit(0)
 		}()
 
