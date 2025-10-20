@@ -17,4 +17,4 @@ RUN apk update && \
     apk --no-cache add ca-certificates bash
 WORKDIR /root
 COPY --from=go-build /gotty/gotty /usr/bin/
-CMD ["gotty",  "-w", "bash"]
+CMD ["gotty",  "-w", "--reconnect", "--reconnect-time", "3", "bash"]

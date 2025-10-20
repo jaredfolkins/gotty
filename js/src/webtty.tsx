@@ -206,7 +206,7 @@ export class WebTTY {
                     return;
                 }
 
-                this.term.showMessage("Connection Closed", 0);
+                this.term.showMessage('Connection Closed. <a href="#" onclick="window.location.reload(); return false;" style="color: #00ff00; text-decoration: underline;">Click Here to Reload</a>', 0);
                 if (this.reconnect > 0) {
                     reconnectTimeout = setTimeout(() => {
                         connection = this.connectionFactory.create();
