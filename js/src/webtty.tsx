@@ -79,7 +79,7 @@ export interface Connection {
     isOpen(): boolean;
     onOpen(callback: () => void): void;
     onReceive(callback: (data: string) => void): void;
-    onClose(callback: () => void): void;
+    onClose(callback: (code?: number, reason?: string) => void): void;
 }
 
 export interface ConnectionFactory {
@@ -193,9 +193,19 @@ export class WebTTY {
                 }
             });
 
-            connection.onClose(() => {
+            connection.onClose((code?: number, reason?: string) => {
                 clearInterval(pingTimer);
                 this.term.deactivate();
+
+                // Check if connection was closed due to max connections (code 4000)
+                if (code === 4000) {
+                    this.term.showMessage("Another session is active. Refreshing page in 5 seconds...", 5000);
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 5000);
+                    return;
+                }
+
                 this.term.showMessage("Connection Closed", 0);
                 if (this.reconnect > 0) {
                     reconnectTimeout = setTimeout(() => {

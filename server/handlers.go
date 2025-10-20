@@ -52,13 +52,6 @@ func (server *Server) generateHandleWS(ctx context.Context, cancel context.Cance
 			}
 		}()
 
-		if int64(server.options.MaxConnection) != 0 {
-			if num > server.options.MaxConnection {
-				closeReason = "exceeding max number of connections"
-				return
-			}
-		}
-
 		log.Printf("New client connected: %s, connections: %d/%d", r.RemoteAddr, num, server.options.MaxConnection)
 
 		if r.Method != "GET" {
@@ -72,6 +65,17 @@ func (server *Server) generateHandleWS(ctx context.Context, cancel context.Cance
 			return
 		}
 		defer conn.Close()
+
+		// Check if max connections exceeded after upgrade so we can send a proper close message
+		if int64(server.options.MaxConnection) != 0 {
+			if num > server.options.MaxConnection {
+				closeReason = "exceeding max number of connections"
+				// Send close frame with custom code 4000 and reason
+				conn.WriteMessage(websocket.CloseMessage,
+					websocket.FormatCloseMessage(4000, "Another session is active"))
+				return
+			}
+		}
 
 		var headers map[string][]string
 		if server.options.PassHeaders {

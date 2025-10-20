@@ -51,9 +51,9 @@ export class Connection {
         }
     };
 
-    onClose(callback: () => void) {
+    onClose(callback: (code?: number, reason?: string) => void) {
         this.bare.onclose = (event) => {
-            callback();
+            callback(event.code, event.reason);
         };
     };
 }
