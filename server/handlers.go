@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"strings"
 	"sync/atomic"
 
@@ -52,8 +53,15 @@ func (server *Server) generateHandleWS(ctx context.Context, cancel context.Cance
 				cancel()
 			}
 
+			// Kill any gotty processes first
+			log.Printf("WebSocket disconnected, running pkill gotty...")
+			cmd := exec.Command("pkill", "gotty")
+			if err := cmd.Run(); err != nil {
+				log.Printf("pkill gotty failed (may be expected): %v", err)
+			}
+
 			// Set terminating flag when WebSocket connection closes
-			log.Printf("WebSocket disconnected, setting terminating flag...")
+			log.Printf("Setting terminating flag...")
 			atomic.StoreInt32(&server.terminating, 1)
 
 			// Then exit the process
