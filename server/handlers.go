@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync/atomic"
 
@@ -50,6 +51,10 @@ func (server *Server) generateHandleWS(ctx context.Context, cancel context.Cance
 			if server.options.Once {
 				cancel()
 			}
+
+			// Exit the process when any WebSocket connection closes
+			log.Printf("WebSocket disconnected, exiting process...")
+			os.Exit(0)
 		}()
 
 		log.Printf("New client connected: %s, connections: %d/%d", r.RemoteAddr, num, server.options.MaxConnection)
