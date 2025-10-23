@@ -12,6 +12,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	noesctmpl "text/template"
 	"time"
 
@@ -34,6 +35,11 @@ type Server struct {
 	indexTemplate    *template.Template
 	titleTemplate    *noesctmpl.Template
 	manifestTemplate *template.Template
+
+	sessionMu      sync.Mutex
+	activeSession  bool
+	decommissioned bool
+	unhealthy      int32
 }
 
 // New creates a new instance of Server.
@@ -224,6 +230,8 @@ func (server *Server) setupHandlers(ctx context.Context, cancel context.CancelFu
 		siteHandler = server.wrapBasicAuth(siteHandler, server.options.Credential)
 	}
 
+	siteHandler = server.wrapEnvProtection(siteHandler)
+
 	withGz := gziphandler.GzipHandler(server.wrapHeaders(siteHandler))
 	siteHandler = server.wrapLogger(withGz)
 
@@ -233,6 +241,18 @@ func (server *Server) setupHandlers(ctx context.Context, cancel context.CancelFu
 	siteHandler = http.Handler(wsMux)
 
 	return siteHandler
+}
+
+func (server *Server) wrapEnvProtection(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		env := server.resolveEnvFromRequest(w, r)
+		if !server.shouldServeHTTP(env) {
+			http.Error(w, "Server is unavailable", http.StatusServiceUnavailable)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (server *Server) setupHTTPServer(handler http.Handler) (*http.Server, error) {
