@@ -12,6 +12,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"sync/atomic"
 	noesctmpl "text/template"
 	"time"
@@ -37,6 +38,11 @@ type Server struct {
 	manifestTemplate *template.Template
 
 	terminating int32 // atomic flag for termination state
+
+	sessionMu      sync.Mutex
+	activeSession  bool
+	decommissioned bool
+	unhealthy      int32
 }
 
 // New creates a new instance of Server.
@@ -227,6 +233,8 @@ func (server *Server) setupHandlers(ctx context.Context, cancel context.CancelFu
 		siteHandler = server.wrapBasicAuth(siteHandler, server.options.Credential)
 	}
 
+	siteHandler = server.wrapEnvProtection(siteHandler)
+
 	withGz := gziphandler.GzipHandler(server.wrapHeaders(siteHandler))
 	siteHandler = server.wrapLogger(withGz)
 
@@ -248,6 +256,18 @@ func (server *Server) wrapTerminationMiddleware(handler http.Handler) http.Handl
 			return
 		}
 		handler.ServeHTTP(w, r)
+	})
+}
+
+func (server *Server) wrapEnvProtection(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		env := server.resolveEnvFromRequest(w, r)
+		if !server.shouldServeHTTP(env) {
+			http.Error(w, "Server is unavailable", http.StatusServiceUnavailable)
+			return
+		}
+
+		next.ServeHTTP(w, r)
 	})
 }
 

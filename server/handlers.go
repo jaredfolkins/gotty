@@ -14,7 +14,7 @@ import (
 	"sync/atomic"
 
 	"github.com/gorilla/websocket"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 
 	"github.com/sorenisanerd/gotty/webtty"
 )
@@ -31,6 +31,8 @@ func (server *Server) generateHandleWS(ctx context.Context, cancel context.Cance
 	}()
 
 	return func(w http.ResponseWriter, r *http.Request) {
+		env := server.resolveEnvFromRequest(w, r)
+
 		if server.options.Once {
 			success := atomic.CompareAndSwapInt64(once, 0, 1)
 			if !success {
@@ -39,10 +41,37 @@ func (server *Server) generateHandleWS(ctx context.Context, cancel context.Cance
 			}
 		}
 
-		num := counter.add(1)
+		guard, err := server.beginManagedSession(env)
+		if err != nil {
+			status := http.StatusServiceUnavailable
+			message := err.Error()
+			if err == errServerDestroyed {
+				message = "Server is unavailable"
+			}
+			http.Error(w, message, status)
+			return
+		}
+
+		var (
+			counterIncremented        bool
+			sessionShouldDecommission bool
+		)
+
 		closeReason := "unknown reason"
 
 		defer func() {
+			if guard != nil {
+				destroyed := guard.finish(sessionShouldDecommission)
+				if destroyed {
+					log.Printf("Server decommissioned after connection from %s", r.RemoteAddr)
+				}
+			}
+		}()
+
+		defer func() {
+			if !counterIncremented {
+				return
+			}
 			num := counter.done()
 			log.Printf(
 				"Connection closed by %s: %s, connections: %d/%d",
@@ -69,12 +98,14 @@ func (server *Server) generateHandleWS(ctx context.Context, cancel context.Cance
 			os.Exit(0)
 		}()
 
-		log.Printf("New client connected: %s, connections: %d/%d", r.RemoteAddr, num, server.options.MaxConnection)
-
 		if r.Method != "GET" {
-			http.Error(w, "Method not allowed", 405)
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+
+		num := counter.add(1)
+		counterIncremented = true
+		log.Printf("New client connected: %s, connections: %d/%d", r.RemoteAddr, num, server.options.MaxConnection)
 
 		conn, err := server.upgrader.Upgrade(w, r, nil)
 		if err != nil {
@@ -105,6 +136,10 @@ func (server *Server) generateHandleWS(ctx context.Context, cancel context.Cance
 
 		err = server.processWSConn(ctx, conn, headers, queryParams)
 
+		if env != envValueDev {
+			sessionShouldDecommission = shouldDecommission(err)
+		}
+
 		switch err {
 		case ctx.Err():
 			closeReason = "cancelation"
@@ -121,19 +156,19 @@ func (server *Server) generateHandleWS(ctx context.Context, cancel context.Cance
 func (server *Server) processWSConn(ctx context.Context, conn *websocket.Conn, headers map[string][]string, httpQueryParams url.Values) error {
 	typ, initLine, err := conn.ReadMessage()
 	if err != nil {
-		return errors.Wrapf(err, "failed to authenticate websocket connection")
+		return pkgerrors.Wrapf(err, "failed to authenticate websocket connection")
 	}
 	if typ != websocket.TextMessage {
-		return errors.New("failed to authenticate websocket connection: invalid message type")
+		return pkgerrors.New("failed to authenticate websocket connection: invalid message type")
 	}
 
 	var init InitMessage
 	err = json.Unmarshal(initLine, &init)
 	if err != nil {
-		return errors.Wrapf(err, "failed to authenticate websocket connection")
+		return pkgerrors.Wrapf(err, "failed to authenticate websocket connection")
 	}
 	if init.AuthToken != server.options.Credential {
-		return errors.New("failed to authenticate websocket connection")
+		return pkgerrors.New("failed to authenticate websocket connection")
 	}
 
 	queryPath := "?"
@@ -143,7 +178,7 @@ func (server *Server) processWSConn(ctx context.Context, conn *websocket.Conn, h
 
 	query, err := url.Parse(queryPath)
 	if err != nil {
-		return errors.Wrapf(err, "failed to parse arguments")
+		return pkgerrors.Wrapf(err, "failed to parse arguments")
 	}
 	params := query.Query()
 
@@ -157,7 +192,7 @@ func (server *Server) processWSConn(ctx context.Context, conn *websocket.Conn, h
 	var slave Slave
 	slave, err = server.factory.New(params, headers)
 	if err != nil {
-		return errors.Wrapf(err, "failed to create backend")
+		return pkgerrors.Wrapf(err, "failed to create backend")
 	}
 	defer slave.Close()
 
@@ -175,7 +210,7 @@ func (server *Server) processWSConn(ctx context.Context, conn *websocket.Conn, h
 	titleBuf := new(bytes.Buffer)
 	err = server.titleTemplate.Execute(titleBuf, titleVars)
 	if err != nil {
-		return errors.Wrapf(err, "failed to fill window title template")
+		return pkgerrors.Wrapf(err, "failed to fill window title template")
 	}
 
 	opts := []webtty.Option{
@@ -195,7 +230,7 @@ func (server *Server) processWSConn(ctx context.Context, conn *websocket.Conn, h
 	}
 	tty, err := webtty.New(&wsWrapper{conn}, slave, opts...)
 	if err != nil {
-		return errors.Wrapf(err, "failed to create webtty")
+		return pkgerrors.Wrapf(err, "failed to create webtty")
 	}
 
 	err = tty.Run(ctx)
@@ -218,6 +253,20 @@ func (server *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Write(indexBuf.Bytes())
+}
+
+func shouldDecommission(err error) bool {
+	if err == nil {
+		return true
+	}
+
+	cause := pkgerrors.Cause(err)
+	switch cause {
+	case context.Canceled, context.DeadlineExceeded, webtty.ErrMasterClosed, webtty.ErrSlaveClosed:
+		return true
+	default:
+		return false
+	}
 }
 
 func (server *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
