@@ -253,7 +253,7 @@ func (server *Server) setupHandlers(ctx context.Context, cancel context.CancelFu
 func (server *Server) wrapTerminationMiddleware(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if atomic.LoadInt32(&server.terminating) == 1 {
-			http.Error(w, "Service is terminating", 499)
+			http.Error(w, "Service unavailable - terminal session disconnected", http.StatusServiceUnavailable)
 			return
 		}
 		handler.ServeHTTP(w, r)
