@@ -1,6 +1,7 @@
 OUTPUT_DIR = ./builds
 GIT_COMMIT = `git rev-parse HEAD | cut -c1-7`
-VERSION = $(shell git describe --tags)
+# Prefer tags for the version, but gracefully fall back to a short commit or "unknown".
+VERSION ?= $(shell git describe --tags --dirty --always 2>/dev/null || git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_OPTIONS = -ldflags "-X main.Version=$(VERSION)"
 
 ifeq ($(DEV), 1)
@@ -18,7 +19,7 @@ gotty: main.go assets server/*.go webtty/*.go backend/*.go Makefile
 docker:
 	docker build . -t gotty-bash:$(VERSION)
 
-.PHONY: all docker assets
+.PHONY: all docker assets dev
 assets: bindata/static/js/gotty.js.map \
 	bindata/static/js/gotty.js \
 	bindata/static/index.html \
@@ -31,6 +32,11 @@ assets: bindata/static/js/gotty.js.map \
 	bindata/static/icon_192.png
 
 all: gotty
+
+dev: export DEV=1
+dev: gotty
+	@test -f /tmp/gotty_test_local || touch /tmp/gotty_test_local
+	./gotty --permit-write /bin/bash --rcfile /tmp/gotty_test_local
 
 bindata/static bindata/static/css bindata/static/js:
 	mkdir -p $@
