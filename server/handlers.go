@@ -55,6 +55,7 @@ func (server *Server) generateHandleWS(ctx context.Context, cancel context.Cance
 		var (
 			counterIncremented        bool
 			sessionShouldDecommission bool
+			wsSlotAcquired            bool
 		)
 
 		closeReason := "unknown reason"
@@ -98,6 +99,12 @@ func (server *Server) generateHandleWS(ctx context.Context, cancel context.Cance
 			os.Exit(0)
 		}()
 
+		defer func() {
+			if wsSlotAcquired {
+				server.releaseWebsocket()
+			}
+		}()
+
 		if r.Method != "GET" {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -113,6 +120,14 @@ func (server *Server) generateHandleWS(ctx context.Context, cancel context.Cance
 			return
 		}
 		defer conn.Close()
+
+		if !server.tryLockWebsocket() {
+			closeReason = "another websocket session is already active"
+			conn.WriteMessage(websocket.CloseMessage,
+				websocket.FormatCloseMessage(4000, "Another session is active"))
+			return
+		}
+		wsSlotAcquired = true
 
 		// Check if max connections exceeded after upgrade so we can send a proper close message
 		if int64(server.options.MaxConnection) != 0 {

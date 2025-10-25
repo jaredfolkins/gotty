@@ -37,7 +37,8 @@ type Server struct {
 	titleTemplate    *noesctmpl.Template
 	manifestTemplate *template.Template
 
-	terminating int32 // atomic flag for termination state
+	terminating     int32 // atomic flag for termination state
+	activeWebsocket int32 // atomic flag to ensure only one websocket is active at a time
 
 	sessionMu      sync.Mutex
 	activeSession  bool
@@ -285,6 +286,14 @@ func (server *Server) setupHTTPServer(handler http.Handler) (*http.Server, error
 	}
 
 	return srv, nil
+}
+
+func (server *Server) tryLockWebsocket() bool {
+	return atomic.CompareAndSwapInt32(&server.activeWebsocket, 0, 1)
+}
+
+func (server *Server) releaseWebsocket() {
+	atomic.StoreInt32(&server.activeWebsocket, 0)
 }
 
 func (server *Server) tlsConfig() (*tls.Config, error) {
